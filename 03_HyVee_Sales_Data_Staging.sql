@@ -1,8 +1,16 @@
+-- Environment Setup
+
+START TRANSACTION;
+
 DROP DATABASE IF EXISTS STG_HYVEE;
 CREATE DATABASE STG_HYVEE;
 
 DROP DATABASE IF EXISTS INT_HYVEE;
 CREATE DATABASE INT_HYVEE;
+
+COMMIT;
+
+-- Staging Layer Setup
 
 USE STG_HYVEE;
 
@@ -30,8 +38,6 @@ CREATE TABLE sales (
 SET GLOBAL local_infile = 'ON';
 SHOW VARIABLES LIKE 'local_infile';
 
-SHOW VARIABLES LIKE 'secure_file_priv';
-
 LOAD DATA 
 	LOCAL INFILE "D:/GitHub/hyvee-iowa-liquor-sales-insight/data/clean_hyvee.csv"
 	INTO TABLE sales
@@ -42,8 +48,7 @@ LOAD DATA
     
 SELECT count(*) FROM sales;
 
-
-SHOW GLOBAL VARIABLES LIKE 'net_read_timeout';
+-- Integration Layer Setup
 
 USE INT_HYVEE;
 
@@ -56,3 +61,7 @@ LOAD DATA
 	ENCLOSED BY '"' 
 	LINES TERMINATED BY '\n'
 	IGNORE 1 ROWS;
+
+SELECT count(*) FROM sales;
+
+SET GLOBAL local_infile = 'OFF';
