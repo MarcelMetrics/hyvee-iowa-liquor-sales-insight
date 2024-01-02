@@ -1,8 +1,18 @@
+/* 
+================================
+DATA MODELING
+================================
+*/
+
 USE INT_HYVEE;
 
--- Create dimension tables
+/*
+--------------------
+DIMENSION TABLE 1: Locations
+--------------------
+Storing unique locations based on zipcode.
+*/
 
--- Locations
 DROP TABLE IF EXISTS Locations;
 
 CREATE TABLE Locations (
@@ -29,7 +39,13 @@ FROM RankedZipcodes
 WHERE rn = 1
 ORDER BY zipcode;
 
--- Stores
+/*
+--------------------
+DIMENSION TABLE 2: Stores
+--------------------
+Contains unique stores and their info.
+*/
+
 DROP TABLE IF EXISTS Stores;
 
 CREATE TABLE Stores (
@@ -60,7 +76,13 @@ FROM RankedStores
 WHERE rn = 1
 ORDER BY store_id;
 
--- StoreFormats
+/*
+--------------------
+DIMENSION TABLE 3: Store Formats
+--------------------
+Categorizing stores based on their format.
+*/
+
 DROP TABLE IF EXISTS StoreFormats;
 
 CREATE TABLE StoreFormats (
@@ -77,6 +99,7 @@ ALTER TABLE Stores
 ADD COLUMN store_format_id INT,
 ADD FOREIGN KEY (store_format_id) REFERENCES StoreFormats(store_format_id);
 
+-- Updating store format IDs in Stores
 UPDATE Stores s
 INNER JOIN StoreFormats sf ON s.store_format = sf.store_format
 SET s.store_format_id = sf.store_format_id;
@@ -84,7 +107,13 @@ SET s.store_format_id = sf.store_format_id;
 ALTER TABLE Stores
 DROP COLUMN store_format;
 
--- Categories
+/*
+--------------------
+DIMENSION TABLE 4: Categories
+--------------------
+Classifying products into categories.
+*/
+
 DROP TABLE IF EXISTS Categories;
 
 CREATE TABLE Categories (
@@ -99,7 +128,13 @@ SELECT DISTINCT
 FROM sales
 ORDER BY category;
 
--- Vendors
+/*
+--------------------
+DIMENSION TABLE 5: Vendors
+--------------------
+Storing information about product vendors.
+*/
+
 DROP TABLE IF EXISTS Vendors;
 
 CREATE TABLE Vendors (
@@ -123,7 +158,13 @@ FROM RankedVendors
 WHERE rn = 1
 ORDER BY vendor_no;
 
--- Products
+/*
+--------------------
+DIMENSION TABLE 6: Products
+--------------------
+Detailed information about each product.
+*/
+
 SELECT DISTINCT 
 	itemno AS product_id,
     im_desc AS product_info,
@@ -131,7 +172,7 @@ SELECT DISTINCT
     vendor_no AS vendor_id
 FROM sales
 ORDER BY itemno;
--- Too many duplicated product id's. Reassigning the id.
+-- Reassigning product IDs due to duplicates
 
 DROP TABLE IF EXISTS Products;
 
@@ -156,7 +197,7 @@ ALTER TABLE sales
 ADD COLUMN product_id INT
 ;
 
--- Creating indexes for performance reasons
+-- Creating indexes for join optimization
 CREATE INDEX idx_sales_im_desc ON sales(im_desc);
 CREATE INDEX idx_sales_category ON sales(category);
 CREATE INDEX idx_sales_vendor_no ON sales(vendor_no);
@@ -164,6 +205,7 @@ CREATE INDEX idx_products_product_info ON Products(product_info);
 CREATE INDEX idx_products_category_id ON Products(category_id);
 CREATE INDEX idx_products_vendor_id ON Products(vendor_id);
 
+-- Temporarily disabling safe updates for large-scale update
 SET SQL_SAFE_UPDATES = 0;
 UPDATE sales s
 INNER JOIN Products p 
@@ -173,7 +215,7 @@ INNER JOIN Products p
 SET s.product_id = p.product_id;
 SET SQL_SAFE_UPDATES = 1;
 
--- Dropping indexes to save space
+-- Dropping indexes to free up space
 ALTER TABLE sales DROP INDEX idx_sales_im_desc;
 ALTER TABLE sales DROP INDEX idx_sales_category;
 ALTER TABLE sales DROP INDEX idx_sales_vendor_no;
@@ -181,7 +223,13 @@ ALTER TABLE Products DROP INDEX idx_products_product_info;
 ALTER TABLE Products DROP INDEX idx_products_category_id;
 ALTER TABLE Products DROP INDEX idx_products_vendor_id;
 
--- Create the fact table Transactions
+/*
+--------------------
+FACT TABLE: Transactions
+--------------------
+Capturing each sales transaction in detail.
+*/
+
 DROP TABLE IF EXISTS Transactions;
 
 CREATE TABLE Transactions (
