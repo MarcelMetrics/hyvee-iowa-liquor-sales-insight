@@ -111,9 +111,9 @@ state_bottle_cost, state_bottle_retail, sale_bottles
 
 # %%
 # ETL pipeline
-start_year = 2023
+start_year = 2021
 current_year = datetime.now().year
-batch_size = 5000  
+batch_size = 10000  
 
 for year in range(start_year, current_year + 1):
     offset = 0
