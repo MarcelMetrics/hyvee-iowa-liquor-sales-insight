@@ -15,7 +15,7 @@ COMMIT;
 USE STG_HYVEE;
 
 CREATE TABLE sales (
-    invoice_line_no VARCHAR(255),
+    invoice_line_no VARCHAR(255) PRIMARY KEY,
     date DATE,
     store INT,
     name VARCHAR(255),
