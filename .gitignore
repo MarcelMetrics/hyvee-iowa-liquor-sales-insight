@@ -1,3 +1,5 @@
 
 config.json
 *.csv
+config/mysql_config.json
+config/socrata_config.json
