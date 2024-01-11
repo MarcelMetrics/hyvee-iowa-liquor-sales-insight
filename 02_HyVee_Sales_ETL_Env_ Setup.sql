@@ -33,7 +33,6 @@ CREATE TABLE sales (
     sale_bottles INT
 );
 
-
 -- Integration Layer Setup
 
 USE INT_HYVEE;
