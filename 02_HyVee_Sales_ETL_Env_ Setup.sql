@@ -33,7 +33,6 @@ CREATE TABLE sales (
     sale_bottles INT
 );
 
-SELECT count(*) FROM sales;
 
 -- Integration Layer Setup
 
