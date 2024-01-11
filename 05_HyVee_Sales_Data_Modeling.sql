@@ -8,40 +8,7 @@ USE INT_HYVEE;
 
 /*
 --------------------
-DIMENSION TABLE 1: Locations
---------------------
-Storing unique locations based on zipcode.
-*/
-
-DROP TABLE IF EXISTS Locations;
-
-CREATE TABLE Locations (
-    zipcode VARCHAR(10) PRIMARY KEY,
-    county VARCHAR(100),
-    city VARCHAR(100)
-);
-
-INSERT INTO Locations (zipcode, county, city)
-WITH RankedZipcodes AS (
-    SELECT 
-        zipcode, 
-        county, 
-        city,
-        -- Select only the latest instance of any duplicated zipcode (possibly reassignment of zipcode)
-        ROW_NUMBER() OVER (PARTITION BY zipcode ORDER BY date DESC) as rn
-    FROM sales
-)
-SELECT 
-    zipcode, 
-    county, 
-    city
-FROM RankedZipcodes
-WHERE rn = 1
-ORDER BY zipcode;
-
-/*
---------------------
-DIMENSION TABLE 2: Stores
+DIMENSION TABLE 1: Stores
 --------------------
 Contains unique stores and their info.
 */
@@ -50,178 +17,86 @@ DROP TABLE IF EXISTS Stores;
 
 CREATE TABLE Stores (
     store_id INT PRIMARY KEY,
+	store_name VARCHAR(255),
     store_format VARCHAR(100),
-    store_name VARCHAR(255),
     zipcode VARCHAR(10),
-    FOREIGN KEY (zipcode) REFERENCES Locations(zipcode)
+    city VARCHAR(100),
+    county VARCHAR(100)
 );
 
-INSERT INTO Stores (store_id, store_format, store_name, zipcode)
+INSERT INTO Stores (store_id, store_name, store_format, zipcode, city, county)
 WITH RankedStores AS (
 	SELECT 
 		store,
+        name, 
 		store_format, 
-		name, 
-		zipcode,	
+		zipcode,
+		city,
+		county,
         -- Select only the latest instance of any duplicated store id (possiblly callsign updated over time)
         ROW_NUMBER() OVER (PARTITION BY store ORDER BY date DESC) as rn
 	FROM sales
 )
 SELECT DISTINCT
     store AS store_id,
-    store_format, 
     name AS store_name, 
-    zipcode
+    store_format, 
+    zipcode,
+    city,
+    county
 FROM RankedStores
 WHERE rn = 1
 ORDER BY store_id;
 
 /*
 --------------------
-DIMENSION TABLE 3: Store Formats
+DIMENSION TABLE 2: Items
 --------------------
-Categorizing stores based on their format.
-*/
-
-DROP TABLE IF EXISTS StoreFormats;
-
-CREATE TABLE StoreFormats (
-    store_format_id INT PRIMARY KEY AUTO_INCREMENT,
-    store_format VARCHAR(100) UNIQUE
-);
-
-INSERT INTO StoreFormats (store_format)
-SELECT DISTINCT store_format 
-FROM Stores
-ORDER BY store_format;
-
-ALTER TABLE Stores
-ADD COLUMN store_format_id INT,
-ADD FOREIGN KEY (store_format_id) REFERENCES StoreFormats(store_format_id);
-
--- Updating store format IDs in Stores
-UPDATE Stores s
-INNER JOIN StoreFormats sf ON s.store_format = sf.store_format
-SET s.store_format_id = sf.store_format_id;
-
-ALTER TABLE Stores
-DROP COLUMN store_format;
-
-/*
---------------------
-DIMENSION TABLE 4: Categories
---------------------
-Classifying products into categories.
-*/
-
-DROP TABLE IF EXISTS Categories;
-
-CREATE TABLE Categories (
-    category_id INT PRIMARY KEY,
-    category_name VARCHAR(255)
-);
-
-INSERT INTO Categories(category_id, category_name)
-SELECT DISTINCT
-	category AS category_id,
-    category_name
-FROM sales
-ORDER BY category;
-
-/*
---------------------
-DIMENSION TABLE 5: Vendors
---------------------
-Storing information about product vendors.
-*/
-
-DROP TABLE IF EXISTS Vendors;
-
-CREATE TABLE Vendors (
-    vendor_id INT PRIMARY KEY,
-    vendor_name VARCHAR(255)
-);
-
-INSERT INTO Vendors(vendor_id, vendor_name)
-WITH RankedVendors AS (
-	SELECT 
-		vendor_no,
-		vendor_name,
-		ROW_NUMBER() OVER(PARTITION BY vendor_no ORDER BY date DESC) AS rn
-	FROM 
-		sales
-)
-SELECT
-	vendor_no AS vendor_id,
-    vendor_name
-FROM RankedVendors
-WHERE rn = 1
-ORDER BY vendor_no;
-
-/*
---------------------
-DIMENSION TABLE 6: Products
---------------------
-Detailed information about each product.
+Detailed information about each item.
 */
 
 SELECT DISTINCT 
-	itemno AS product_id,
-    im_desc AS product_info,
-    category AS category_id,
-    vendor_no AS vendor_id
+	itemno AS item_id,
+    im_desc AS item_name,
+    category_name AS subcategory,
+    liquor_type AS category,
+    vendor_name AS vendor
+
 FROM sales
 ORDER BY itemno;
 -- Reassigning product IDs due to duplicates
 
-DROP TABLE IF EXISTS Products;
+DROP TABLE IF EXISTS Items;
 
-CREATE TABLE Products (
-    product_id INT PRIMARY KEY AUTO_INCREMENT,
-	product_info VARCHAR(255),
-    category_id INT,
-    vendor_id INT,
-    FOREIGN KEY (category_id) REFERENCES Categories(category_id),
-    FOREIGN KEY (vendor_id) REFERENCES Vendors(vendor_id)
+CREATE TABLE Items (
+    item_id INT PRIMARY KEY,
+	item_name VARCHAR(255),
+    subcategory VARCHAR(255),
+    category VARCHAR(255),
+    vendor VARCHAR(255)
 );
 
-INSERT INTO Products (product_info, category_id, vendor_id)
+INSERT INTO Items (item_id, item_name, subcategory, category, vendor)
+WITH RankedItems AS (
+	SELECT 
+		itemno,
+        im_desc, 
+		category_name, 
+		liquor_type,
+		vendor_name,
+        -- Select only the latest instance of any duplicated item id (possiblly callsign updated over time)
+        ROW_NUMBER() OVER (PARTITION BY itemno ORDER BY date DESC) as rn
+	FROM sales
+)
 SELECT DISTINCT 
-    im_desc AS product_info,
-    category AS category_id,
-    vendor_no AS vendor_id
-FROM sales
-ORDER BY product_info;
-
-ALTER TABLE sales
-ADD COLUMN product_id INT
-;
-
--- Creating indexes for join optimization
-CREATE INDEX idx_sales_im_desc ON sales(im_desc);
-CREATE INDEX idx_sales_category ON sales(category);
-CREATE INDEX idx_sales_vendor_no ON sales(vendor_no);
-CREATE INDEX idx_products_product_info ON Products(product_info);
-CREATE INDEX idx_products_category_id ON Products(category_id);
-CREATE INDEX idx_products_vendor_id ON Products(vendor_id);
-
--- Temporarily disabling safe updates for large-scale update
-SET SQL_SAFE_UPDATES = 0;
-UPDATE sales s
-INNER JOIN Products p 
-    ON s.im_desc = p.product_info 
-    AND s.category = p.category_id 
-    AND s.vendor_no = p.vendor_id
-SET s.product_id = p.product_id;
-SET SQL_SAFE_UPDATES = 1;
-
--- Dropping indexes to free up space
-ALTER TABLE sales DROP INDEX idx_sales_im_desc;
-ALTER TABLE sales DROP INDEX idx_sales_category;
-ALTER TABLE sales DROP INDEX idx_sales_vendor_no;
-ALTER TABLE Products DROP INDEX idx_products_product_info;
-ALTER TABLE Products DROP INDEX idx_products_category_id;
-ALTER TABLE Products DROP INDEX idx_products_vendor_id;
+	itemno AS item_id,
+    im_desc AS item_name,
+    category_name AS subcategory,
+    liquor_type AS category,
+    vendor_name AS vendor
+FROM RankedItems
+WHERE rn = 1
+ORDER BY item_id;
 
 /*
 --------------------
@@ -233,16 +108,16 @@ Capturing each sales transaction in detail.
 DROP TABLE IF EXISTS Transactions;
 
 CREATE TABLE Transactions (
-    invoice_line_id BIGINT PRIMARY KEY,
+    invoice_line_id VARCHAR(255) PRIMARY KEY,
     date DATE,
     store_id INT,
-    product_id INT,
+    item_id INT,
     cost DECIMAL(10, 2),
     price DECIMAL(10, 2),
     sales_volume INT,
-    revenue DECIMAL(10, 2),
     FOREIGN KEY (store_id) REFERENCES Stores(store_id),
-    FOREIGN KEY (product_id) REFERENCES Products(product_id)
+    FOREIGN KEY (item_id) REFERENCES Items(Item_id),
+    FOREIGN KEY (date) REFERENCES Calendar(date)
 );
 
 INSERT INTO Transactions
@@ -250,11 +125,10 @@ SELECT
 	invoice_line_no AS invoice_line_id,
     date,
     store AS store_id,
-    product_id,
+    itemno AS item_id,
     state_bottle_cost AS cost,
     state_bottle_retail as price,
-    sale_bottles AS sales_volume,
-    revenue
+    sale_bottles AS sales_volume
 FROM sales
 ORDER BY date, invoice_line_no;
 
