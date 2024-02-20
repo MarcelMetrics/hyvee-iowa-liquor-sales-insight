@@ -1,1 +1,1 @@
-{"store": "int", "zipcode": "int", "category": "int", "vendor_no": "int", "itemno": "int", "state_bottle_cost": "float", "state_bottle_retail": "float", "sale_bottles": "int"}
+{"store": "int", "zipcode": "int", "category": "int", "vendor_no": "int", "itemno": "int", "bottle_volume_ml": "int", "state_bottle_cost": "float", "state_bottle_retail": "float", "sale_bottles": "int"}
