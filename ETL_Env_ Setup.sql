@@ -19,6 +19,7 @@ CREATE TABLE sales (
     date DATE,
     store INT,
     name VARCHAR(255),
+    address VARCHAR(255), 
     city VARCHAR(100),
     zipcode INT,
     county VARCHAR(100),
@@ -28,6 +29,7 @@ CREATE TABLE sales (
     vendor_name VARCHAR(255),
     itemno INT,
     im_desc VARCHAR(255),
+    bottle_volume_ml INT,
     state_bottle_cost DECIMAL(10, 2),
     state_bottle_retail DECIMAL(10, 2),
     sale_bottles INT
