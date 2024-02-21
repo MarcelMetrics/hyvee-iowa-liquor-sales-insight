@@ -58,3 +58,21 @@ UPDATE calendar SET
 -- Drop the auxiliary tables
 DROP TABLE IF EXISTS numbers_small;
 DROP TABLE IF EXISTS numbers;
+
+-- Add financial_year and financial_quarter 
+ALTER TABLE calendar
+ADD COLUMN financial_year INT,
+ADD COLUMN financial_quarter INT;
+
+UPDATE calendar
+SET
+    financial_year = CASE
+        WHEN MONTH(date) >= 7 THEN YEAR(date) + 1
+        ELSE YEAR(date)
+    END,
+    financial_quarter = CASE
+        WHEN MONTH(date) BETWEEN 7 AND 9 THEN 1
+        WHEN MONTH(date) BETWEEN 10 AND 12 THEN 2
+        WHEN MONTH(date) BETWEEN 1 AND 3 THEN 3
+        WHEN MONTH(date) BETWEEN 4 AND 6 THEN 4
+    END;
