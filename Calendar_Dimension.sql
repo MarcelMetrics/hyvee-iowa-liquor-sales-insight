@@ -35,9 +35,9 @@ CREATE TABLE calendar (
 
 -- First populate with ids and Date
 INSERT INTO calendar (date_id, date)
-SELECT number, DATE_ADD('2021-01-01', INTERVAL number DAY)
+SELECT number, DATE_ADD('2020-01-01', INTERVAL number DAY)
 FROM numbers
-WHERE DATE_ADD('2021-01-01', INTERVAL number DAY) BETWEEN '2021-01-01' AND '2023-12-31'
+WHERE DATE_ADD('2020-01-01', INTERVAL number DAY) BETWEEN '2020-01-01' AND '2025-12-31'
 ORDER BY number;
 
 -- Update other columns based on the date
