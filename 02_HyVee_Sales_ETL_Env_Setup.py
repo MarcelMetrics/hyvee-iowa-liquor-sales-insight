@@ -41,4 +41,4 @@ connection_params = {
     'password': mysql_config['password'],
 }
 
-execute_sql_file('ETL_Env_ Setup.sql', connection_params)
+execute_sql_file('ETL_Env_Setup.sql', connection_params)
