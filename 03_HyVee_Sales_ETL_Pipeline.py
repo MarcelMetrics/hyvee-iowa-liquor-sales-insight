@@ -52,12 +52,12 @@ with open('dicts/num_col_dtype_map.json', 'r') as f:
 
 # %%
 # Function for extracting data via Socrata API
-def extract_data(client, year, batch_size, offset):
-    start_date = f"{year}-01-01T00:00:00.000"
-    end_date = f"{year + 1}-01-01T00:00:00.000"
+def extract_data(client, f_year, batch_size, offset):
+    start_date = f"{f_year - 1}-07-01T00:00:00.000"
+    end_date = f"{f_year}-07-01T00:00:00.000"
     results = client.get("m3tr-qhgy",
                          select=col_selected, 
-                         where=f"LOWER(name) LIKE '%hy-vee%' AND date >= '{start_date}' AND date < '{end_date}'", 
+                         where=f"(LOWER(name) LIKE '%hy-vee%' OR name LIKE '%WALL TO WALL WINE AND SPIRITS%') AND date >= '{start_date}' AND date < '{end_date}'", 
                          limit=batch_size, 
                          offset=offset)
     return results
@@ -96,31 +96,32 @@ def load_data(conn, cursor, df, batch_size, sql_insert_query):
 # %%
 load_sql = """
 INSERT INTO sales (
-    invoice_line_no, date, store, name, city, zipcode, county, 
-    category, category_name, vendor_no, vendor_name, itemno, 
-    im_desc, state_bottle_cost, state_bottle_retail, sale_bottles
-) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    invoice_line_no, date, store, name, address, city, zipcode, county, category, category_name, vendor_no, vendor_name, itemno, im_desc, bottle_volume_ml, state_bottle_cost, state_bottle_retail, sale_bottles
+) 
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
 
 # %%
-col_selected = """
-invoice_line_no, date, store, name, city, zipcode, county, 
-category, category_name, vendor_no, vendor_name, itemno, im_desc, 
-state_bottle_cost, state_bottle_retail, sale_bottles
-"""
+col_selected = 'invoice_line_no, date, store, name, address, city, zipcode, county, category, category_name, vendor_no, vendor_name, itemno, im_desc, bottle_volume_ml, state_bottle_cost, state_bottle_retail, sale_bottles'
 
 # %%
 # ETL pipeline
-start_year = 2021
-current_year = datetime.now().year
+start_f_year = 2024
+
+today = datetime.now()
+if today.month > 7 or (today.month == 7 and today.day > 1):
+    current_f_year = today.year + 1
+else:
+    current_f_year = today.year
+
 batch_size = 10000  
 
-for year in range(start_year, current_year + 1):
+for f_year in range(start_f_year, current_f_year +1):
     offset = 0
     more_data = True
 
     while more_data:
-        results = extract_data(client, year, batch_size, offset)
+        results = extract_data(client, f_year, batch_size, offset)
 
         if not results:
             more_data = False
