@@ -8,7 +8,8 @@
 import pandas as pd
 from sodapy import Socrata
 import json
-from datetime import datetime, timedelta
+# from datetime import datetime, timedelta
+import datetime
 import pymysql
 
 # %%
@@ -35,13 +36,6 @@ host = mysql_config['hostname']
 user = mysql_config['username']
 password = mysql_config['password']
 
-# Establish connections to both STG_HYVEE and INT_HYVEE databases
-conn_stg = pymysql.connect(host=host, user=user, password=password, db='STG_HYVEE')
-cursor_stg = conn_stg.cursor()
-
-conn_int = pymysql.connect(host=host, user=user, password=password, db='INT_HYVEE')
-cursor_int = conn_int.cursor()
-
 # %%
 # Placeholder and data type conversion dictionaries
 with open('dicts/placeholders.json', 'r') as f:
@@ -53,8 +47,9 @@ with open('dicts/num_col_dtype_map.json', 'r') as f:
 # %%
 # Function for extracting data via Socrata API
 def extract_data(client, f_year, batch_size, offset):
-    start_date = f"{f_year - 1}-07-01T00:00:00.000"
-    end_date = f"{f_year}-07-01T00:00:00.000"
+    start_date = f"{f_year - 1}-07-01T00:00:00.000" 
+    today = datetime.datetime.now()
+    end_date = datetime.datetime(today.year, today.month, 1).strftime('%Y-%m-%dT%H:%M:%S.%f')
     results = client.get("m3tr-qhgy",
                          select=col_selected, 
                          where=f"(LOWER(name) LIKE '%hy-vee%' OR name LIKE '%WALL TO WALL WINE AND SPIRITS%') AND date >= '{start_date}' AND date < '{end_date}'", 
@@ -105,36 +100,77 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 col_selected = 'invoice_line_no, date, store, name, address, city, zipcode, county, category, category_name, vendor_no, vendor_name, itemno, im_desc, bottle_volume_ml, state_bottle_cost, state_bottle_retail, sale_bottles'
 
 # %%
+# Establish connections to both STG_HYVEE and INT_HYVEE databases
+conn_stg = pymysql.connect(host=host, user=user, password=password, db='STG_HYVEE')
+cursor_stg = conn_stg.cursor()
+
+conn_int = pymysql.connect(host=host, user=user, password=password, db='INT_HYVEE')
+cursor_int = conn_int.cursor()
+
 # ETL pipeline
-start_f_year = 2024
+cursor_stg.execute("SELECT MAX(date) FROM sales")
+latest_date_result = cursor_stg.fetchone()
 
-today = datetime.now()
-if today.month > 7 or (today.month == 7 and today.day > 1):
-    current_f_year = today.year + 1
+today = datetime.datetime.now()
+
+batch_size = 10000
+
+# If records exist in the database, load the data following the most recent entry
+if latest_date_result and latest_date_result[0]:
+    latest_date = latest_date_result[0]
+    start_date = latest_date.strftime('%Y-%m-%dT%H:%M:%S.%f')
+    print("Start Date:", start_date)
+
+    end_date = datetime.datetime(today.year, today.month, 1).strftime('%Y-%m-%dT%H:%M:%S.%f')
+    print("End Date:", end_date)
+
+    results = client.get("m3tr-qhgy",
+                        select=col_selected,
+                        where=f"(LOWER(name) LIKE '%hy-vee%' OR name LIKE '%WALL TO WALL WINE AND SPIRITS%') AND date >= '{start_date}' AND date < '{end_date}'",
+                        limit=batch_size
+                        )
+    
+    df = pd.DataFrame.from_records(results)
+    df_transformed = transform_data(df)
+
+    load_data(conn_stg, cursor_stg, df_transformed, batch_size, load_sql)
+    load_data(conn_int, cursor_int, df_transformed, batch_size, load_sql)
+
+    cursor_stg.close()
+    conn_stg.close()
+
+    cursor_int.close()
+    conn_int.close()
+
+# If the database contains no records, then load data starting from three fiscal years ago
 else:
-    current_f_year = today.year
+    # Determine FY based on the current month (FY starts in July)
+    if today.month < 7:
+        current_f_year = today.year 
+    else:
+        current_f_year = today.year + 1
 
-batch_size = 10000  
+    start_f_year = current_f_year -3
 
-for f_year in range(start_f_year, current_f_year +1):
-    offset = 0
-    more_data = True
+    for f_year in range(start_f_year, current_f_year +1):
+        offset = 0
+        more_data = True
 
-    while more_data:
-        results = extract_data(client, f_year, batch_size, offset)
+        while more_data:
+            results = extract_data(client, f_year, batch_size, offset)
 
-        if not results:
-            more_data = False
-        else:
-            offset += len(results)
-            df = pd.DataFrame.from_records(results)
-            df_transformed = transform_data(df)
+            if not results:
+                more_data = False
+            else:
+                offset += len(results)
+                df = pd.DataFrame.from_records(results)
+                df_transformed = transform_data(df)
 
-            load_data(conn_stg, cursor_stg, df_transformed, batch_size, load_sql)
-            load_data(conn_int, cursor_int, df_transformed, batch_size, load_sql)
+                load_data(conn_stg, cursor_stg, df_transformed, batch_size, load_sql)
+                load_data(conn_int, cursor_int, df_transformed, batch_size, load_sql)
 
-cursor_stg.close()
-conn_stg.close()
+    cursor_stg.close()
+    conn_stg.close()
 
-cursor_int.close()
-conn_int.close()
+    cursor_int.close()
+    conn_int.close()
