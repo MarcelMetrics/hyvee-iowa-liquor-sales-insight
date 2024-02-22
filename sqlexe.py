@@ -1,23 +1,6 @@
-
-
-# Defining a function to execute sql scripts
+import pymysql
 
 def execute_sql_file(filename, connection_params):
-    import pymysql
-    import json
-
-    with open('config\mysql_config.json') as f:
-        mysql_config = json.load(f)
-
-    host = mysql_config['hostname']
-    user = mysql_config['username']
-    password = mysql_config['password']
-
-    connection_params = {
-        'host': mysql_config['hostname'],
-        'user': mysql_config['username'],
-        'password': mysql_config['password'],
-}
     # Initialize the database connection
     db_connection = pymysql.connect(**connection_params)
     cursor = db_connection.cursor()

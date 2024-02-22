@@ -2,6 +2,7 @@ import pandas as pd
 import json
 from datetime import datetime, timedelta
 import pymysql
+import sqlexe
 
 # MySQL connection settings
 with open('config\mysql_config.json') as f:
@@ -53,6 +54,37 @@ def apply_replacements(x):
 
 df['store_format'] = df['store_format'].apply(apply_replacements)
 
+# Implement the changes in database
+try:
+    conn_int = pymysql.connect(host=host, user=user, password=password, db='INT_HYVEE')
+    
+    with conn_int.cursor() as cursor_int:
+        # Check if the column exists
+        cursor_int.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'INT_HYVEE' 
+            AND table_name = 'stores' 
+            AND column_name = 'store_format';
+        """)
+        if cursor_int.fetchone():
+            # If the column exists, drop it
+            cursor_int.execute("ALTER TABLE stores DROP COLUMN store_format;")
+        
+        # Add the col
+        cursor_int.execute("ALTER TABLE stores ADD COLUMN store_format VARCHAR(255);")
+
+        sql_update = "UPDATE stores SET store_format = %s WHERE store_id = %s;"
+
+        for index, row in df.iterrows():
+            cursor_int.execute(sql_update, (row['store_format'], row['store_id']))
+
+        conn_int.commit()
+except pymysql.Error as e:
+    print(f"Database error occurred: {e}")
+finally:
+    conn_int.close()
+
 # ---------------------------------------
 
 # Liquor Type: Creating a new column to indicate liquor types based on the 'category' and 'category_code' columns.
@@ -78,16 +110,51 @@ def match_liquor_type(number):
     number_str = str(number)[:3] 
     return liquor_type_map.get(number_str, 'Other') 
 
+df = df.drop_duplicates()
 df['liquor_type'] = df['category_code'].apply(match_liquor_type)
+
+# Implement the changes in database
+try:
+    conn_int = pymysql.connect(host=host, user=user, password=password, db='INT_HYVEE')
+    with conn_int.cursor() as cursor_int:
+        # Check if the 'liquor_type' column exists
+        cursor_int.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'INT_HYVEE' 
+            AND table_name = 'items' 
+            AND column_name = 'liquor_type';
+        """)
+        # If the column exists, drop it
+        if cursor_int.fetchone():
+            cursor_int.execute("ALTER TABLE items DROP COLUMN liquor_type;")
+        
+        # Add the column
+        cursor_int.execute("ALTER TABLE items ADD COLUMN liquor_type VARCHAR(255);")
+
+        # Update the col
+        sql_update = "UPDATE items SET liquor_type = %s WHERE category_code = %s;"
+
+        for index, row in df.iterrows():
+            cursor_int.execute(sql_update, (row['liquor_type'], row['category_code']))
+
+        conn_int.commit()
+except pymysql.Error as e:
+    print(f"Database error occurred: {e}")
+finally:
+    conn_int.close()
 
 # ---------------------------------------
 
 # Numerical Metrics: Executing the relevant SQL script
-import sqlexe
+
+with open('config\mysql_config.json') as f:
+  mysql_config = json.load(f)
 
 connection_params = {
     'host': mysql_config['hostname'],
     'user': mysql_config['username'],
     'password': mysql_config['password'],
 }
+
 sqlexe.execute_sql_file('metrics.sql', connection_params)
