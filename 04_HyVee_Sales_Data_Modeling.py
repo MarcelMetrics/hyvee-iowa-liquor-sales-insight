@@ -11,5 +11,7 @@ connection_params = {
     'password': mysql_config['password'],
 }
 
+
+sqlexe.execute_sql_file('Model_Initialization.sql', connection_params)
 sqlexe.execute_sql_file('Calendar_Dimension.sql', connection_params)
 sqlexe.execute_sql_file('Data_Modeling.sql', connection_params)

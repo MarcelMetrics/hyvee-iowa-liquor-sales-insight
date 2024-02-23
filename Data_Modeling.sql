@@ -14,7 +14,6 @@ Contains unique stores and their info.
 */
 
 DROP TABLE IF EXISTS Stores;
-
 CREATE TABLE Stores (
     store_id INT PRIMARY KEY,
 	store_name VARCHAR(255),
@@ -66,7 +65,6 @@ ORDER BY itemno;
 -- Reassigning product IDs due to duplicates
 
 DROP TABLE IF EXISTS Items;
-
 CREATE TABLE Items (
     item_id INT PRIMARY KEY,
 	item_name VARCHAR(255),
@@ -105,7 +103,6 @@ Capturing each sales transaction in detail.
 */
 
 DROP TABLE IF EXISTS Transactions;
-
 CREATE TABLE Transactions (
     invoice_line_id VARCHAR(255) PRIMARY KEY,
     date DATE,
@@ -114,10 +111,7 @@ CREATE TABLE Transactions (
     bottle_volume_ml INT,
     bottle_cost DECIMAL(10, 2),
     bottle_price DECIMAL(10, 2),
-    sale_bottles INT,
-    FOREIGN KEY (store_id) REFERENCES Stores(store_id),
-    FOREIGN KEY (item_id) REFERENCES Items(Item_id),
-    FOREIGN KEY (date) REFERENCES Calendar(date)
+    sale_bottles INT
 );
 
 INSERT INTO Transactions
@@ -132,5 +126,9 @@ SELECT
     sale_bottles
 FROM sales
 ORDER BY date, invoice_line_no;
+
+ALTER TABLE Transactions ADD CONSTRAINT fk_transactions_store_id FOREIGN KEY (store_id) REFERENCES Stores(store_id);
+ALTER TABLE Transactions ADD CONSTRAINT fk_transactions_item_id FOREIGN KEY (item_id) REFERENCES Items(Item_id);
+ALTER TABLE Transactions ADD CONSTRAINT fk_transactions_date FOREIGN KEY (date) REFERENCES Calendar(date);
 
 -- DROP TABLE IF EXISTS sales;
