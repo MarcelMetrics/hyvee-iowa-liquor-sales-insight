@@ -46,16 +46,24 @@ with open('dicts/num_col_dtype_map.json', 'r') as f:
 
 # %%
 # Function for extracting data via Socrata API
-def extract_data(client, f_year, batch_size, offset):
-    start_date = f"{f_year - 1}-07-01T00:00:00.000" 
-    today = datetime.datetime.now()
-    end_date = datetime.datetime(today.year, today.month, 1).strftime('%Y-%m-%dT%H:%M:%S.%f')
-    results = client.get("m3tr-qhgy",
-                         select=col_selected, 
-                         where=f"(LOWER(name) LIKE '%hy-vee%' OR name LIKE '%WALL TO WALL WINE AND SPIRITS%') AND date >= '{start_date}' AND date < '{end_date}'", 
-                         limit=batch_size, 
-                         offset=offset)
-    return results
+def extract_data(client, year, month, batch_size):
+    start_date = f"{year}-{month}-01T00:00:00.000"
+    if month == 12:
+        end_date = f"{year + 1}-01-01T00:00:00.000"
+    else:
+        end_date = f"{year}-{month + 1}-01T00:00:00.000"
+    offset = 0
+    while True:
+        results = client.get("m3tr-qhgy",
+                             select=col_selected,
+                             where=f"(LOWER(name) LIKE '%hy-vee%' OR name LIKE '%WALL TO WALL WINE AND SPIRITS%') AND date >= '{start_date}' AND date < '{end_date}'",
+                             limit=batch_size,
+                             offset=offset)
+        if results:
+            yield results
+            offset += len(results)
+        else:
+            break
 
 # %%
 # Function for transforming data 
@@ -100,6 +108,8 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 col_selected = 'invoice_line_no, date, store, name, address, city, zipcode, county, category, category_name, vendor_no, vendor_name, itemno, im_desc, bottle_volume_ml, state_bottle_cost, state_bottle_retail, sale_bottles'
 
 # %%
+# Start ETL procedure
+
 # Establish connections to both STG_HYVEE and INT_HYVEE databases
 conn_stg = pymysql.connect(host=host, user=user, password=password, db='STG_HYVEE')
 cursor_stg = conn_stg.cursor()
@@ -107,70 +117,49 @@ cursor_stg = conn_stg.cursor()
 conn_int = pymysql.connect(host=host, user=user, password=password, db='INT_HYVEE')
 cursor_int = conn_int.cursor()
 
-# ETL pipeline
 cursor_stg.execute("SELECT MAX(date) FROM sales")
 latest_date_result = cursor_stg.fetchone()
 
 today = datetime.datetime.now()
 
-batch_size = 10000
+batch_size = 8000
 
-# If records exist in the database, load the data following the most recent entry
-if latest_date_result and latest_date_result[0]:
-    latest_date = latest_date_result[0]
-    start_date = latest_date.strftime('%Y-%m-%dT%H:%M:%S.%f')
-    print("Start Date:", start_date)
+try:
+    # If records exist in the database, load the data following the most recent entry
+    if latest_date_result and latest_date_result[0]:
+        latest_date = latest_date_result[0]
+        if latest_date.month == 12:
+            start_year = latest_date.year + 1
+            start_month = 1
+        else:
+            start_year = latest_date.year
+            start_month = latest_date.month + 1
 
-    end_date = datetime.datetime(today.year, today.month, 1).strftime('%Y-%m-%dT%H:%M:%S.%f')
-    print("End Date:", end_date)
+        end_year = today.year
+        end_month = today.month
 
-    results = client.get("m3tr-qhgy",
-                        select=col_selected,
-                        where=f"(LOWER(name) LIKE '%hy-vee%' OR name LIKE '%WALL TO WALL WINE AND SPIRITS%') AND date >= '{start_date}' AND date < '{end_date}'",
-                        limit=batch_size
-                        )
-    
-    df = pd.DataFrame.from_records(results)
-    df_transformed = transform_data(df)
+    # If the database contains no records, then load data starting from 3 fiscal years ago
+    else: 
+        # today.month < [the month fiscal year starts]
+        if today.month < 7:
+            start_year = today.year - 4
+        else:
+            start_year = today.year - 3
 
-    load_data(conn_stg, cursor_stg, df_transformed, batch_size, load_sql)
-    load_data(conn_int, cursor_int, df_transformed, batch_size, load_sql)
-
-    cursor_stg.close()
-    conn_stg.close()
-
-    cursor_int.close()
-    conn_int.close()
-
-# If the database contains no records, then load data starting from three fiscal years ago
-else:
-    # Determine FY based on the current month (FY starts in July)
-    if today.month < 7:
-        current_f_year = today.year 
-    else:
-        current_f_year = today.year + 1
-
-    start_f_year = current_f_year -3
-
-    for f_year in range(start_f_year, current_f_year +1):
-        offset = 0
-        more_data = True
-
-        while more_data:
-            results = extract_data(client, f_year, batch_size, offset)
-
-            if not results:
-                more_data = False
-            else:
-                offset += len(results)
+        start_month = 7
+        end_year = today.year
+        end_month = today.month 
+        
+    for year in range(start_year, end_year + 1):
+        for month in range(start_month if year == start_year else 1, end_month if year == end_year else 13):
+            print(f'----- Batch: {year}-{month} -----')
+            for results in extract_data(client, year, month, batch_size):
                 df = pd.DataFrame.from_records(results)
                 df_transformed = transform_data(df)
-
                 load_data(conn_stg, cursor_stg, df_transformed, batch_size, load_sql)
                 load_data(conn_int, cursor_int, df_transformed, batch_size, load_sql)
-
+finally:
     cursor_stg.close()
     conn_stg.close()
-
     cursor_int.close()
     conn_int.close()
