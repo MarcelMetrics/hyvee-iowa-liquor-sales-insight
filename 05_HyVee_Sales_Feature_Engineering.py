@@ -194,12 +194,21 @@ try:
             # If the column exists, drop it
             cursor_int.execute("ALTER TABLE stores DROP COLUMN full_address;")
         
+        # Create the column 
         cursor_int.execute("ALTER TABLE stores ADD COLUMN full_address VARCHAR(255);")
 
-        sql_update = "UPDATE stores SET full_address = %s WHERE store_id = %s;"
+        # Prepare SQL update queries
+        sql_update_full_address = "UPDATE stores SET full_address = %s WHERE store_id = %s;"
+        sql_update_address      = "UPDATE stores SET address = %s      WHERE store_id = %s;"
+        sql_update_city         = "UPDATE stores SET city = %s         WHERE store_id = %s;"
+        sql_update_county       = "UPDATE stores SET county = %s       WHERE store_id = %s;"
 
+        # Update rows
         for index, row in df.iterrows():
-            cursor_int.execute(sql_update, (row['full_address'], row['store_id']))
+            cursor_int.execute(sql_update_full_address, (row['full_address'], row['store_id']))
+            cursor_int.execute(sql_update_address,      (row['address'],      row['store_id']))
+            cursor_int.execute(sql_update_city,         (row['city'],         row['store_id']))
+            cursor_int.execute(sql_update_county,       (row['county'],       row['store_id']))
 
         conn_int.commit()
 except pymysql.Error as e:
