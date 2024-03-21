@@ -15,7 +15,7 @@ password = mysql_config['password']
 # ---------------------------------------
 
 # Store Format: Creating a new column to indicate store formats based on the 'name' column.
-## Loading data from db
+## Extracting data from MySQL
 conn_int = pymysql.connect(host=host, user=user, password=password, db='INT_HYVEE')
 cursor_int = conn_int.cursor()
 
@@ -89,7 +89,7 @@ finally:
 
 # Liquor Type: Creating a new column to indicate liquor types based on the 'category' and 'category_code' columns.
 
-## Loading data from db
+## Extracting data from MySQL
 conn_int = pymysql.connect(host=host, user=user, password=password, db='INT_HYVEE')
 cursor_int = conn_int.cursor()
 
@@ -137,6 +137,69 @@ try:
 
         for index, row in df.iterrows():
             cursor_int.execute(sql_update, (row['liquor_type'], row['category_code']))
+
+        conn_int.commit()
+except pymysql.Error as e:
+    print(f"Database error occurred: {e}")
+finally:
+    conn_int.close()
+
+# ---------------------------------------
+
+# Full Address: : Creating a new column to indicate full addresses based on the geographical columns.
+
+## Extracting data from MySQL
+conn_int = pymysql.connect(host=host, user=user, password=password, db='INT_HYVEE')
+cursor_int = conn_int.cursor()
+
+sql_query = "SELECT store_id, address, zipcode, city, county FROM stores"
+
+df = pd.read_sql(sql_query, conn_int)
+
+cursor_int.close()
+conn_int.close()
+
+## Cap first letter in col city, county
+df[['city', 'county']] = df[['city', 'county']].apply(lambda x: x.str.title())
+
+## Capitalize each word in col 'address' unless the word starts with a digit
+def title_except_numbers(s):
+    return ' '.join(word.lower() if word[0].isdigit() else word.title() for word in s.split())
+df['address'] = df['address'].apply(title_except_numbers)
+
+## Capitalize directional abbreviations
+df['address'] = df['address'].str.replace('[,.]', '', regex=True) + ' '
+directions = {' Sw ': ' SW ', ' Se ': ' SE ', ' Nw ': ' NW ', ' Ne ': ' NE '}
+for key, value in directions.items():
+    df['address'] = df['address'].str.replace(key, value)
+df['address'] = df['address'].str.rstrip()
+
+## Concat into col 'full_address'
+df['full_address'] = df['address'] + ', ' + df['city'] + ', IA ' + df['zipcode']
+
+## Implement the changes in database
+try:
+    conn_int = pymysql.connect(host=host, user=user, password=password, db='INT_HYVEE')
+    
+    with conn_int.cursor() as cursor_int:
+        # Check if the column exists
+        cursor_int.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'INT_HYVEE' 
+            AND table_name = 'stores' 
+            AND column_name = 'full_address';
+        """)
+        if cursor_int.fetchone():
+            # If the column exists, drop it
+            cursor_int.execute("ALTER TABLE stores DROP COLUMN full_address;")
+        
+        cursor_int.execute("ALTER TABLE stores ADD COLUMN full_address VARCHAR(255);")
+
+        sql_update = "UPDATE stores SET full_address = %s WHERE store_id = %s;"
+
+        for index, row in df.iterrows():
+            cursor_int.execute(sql_update, (row['full_address'], row['store_id']))
 
         conn_int.commit()
 except pymysql.Error as e:
